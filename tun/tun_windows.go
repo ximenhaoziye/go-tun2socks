@@ -167,8 +167,10 @@ func OpenTunDevice(name, addr, gw, mask string, dns []string, persist bool) (io.
 	devId, _ := windows.UTF16FromString(fmt.Sprintf(`\\.\Global\%s.tap`, componentId))
 	// set dhcp with netsh
 	cmd := exec.Command("netsh", "interface", "ip", "set", "address", devName, "dhcp")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Run()
 	cmd = exec.Command("netsh", "interface", "ip", "set", "dns", devName, "dhcp")
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 	cmd.Run()
 	// open
 	fd, err := windows.CreateFile(
