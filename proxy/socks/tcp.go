@@ -16,13 +16,20 @@ type tcpHandler struct {
 
 	proxyHost string
 	proxyPort uint16
+	Uname     string
+	Pwd       string
 }
 
-func NewTCPHandler(proxyHost string, proxyPort uint16) core.TCPConnHandler {
-	return &tcpHandler{
+func NewTCPHandler(proxyHost string, proxyPort uint16, auths ...string) core.TCPConnHandler {
+	th := &tcpHandler{
 		proxyHost: proxyHost,
 		proxyPort: proxyPort,
 	}
+	if len(auths) > 0 {
+		th.Uname = auths[0]
+		th.Pwd = auths[1]
+	}
+	return th
 }
 
 type direction byte
@@ -86,7 +93,14 @@ func (h *tcpHandler) relay(lhs, rhs net.Conn) {
 }
 
 func (h *tcpHandler) Handle(conn net.Conn, target *net.TCPAddr) error {
-	dialer, err := proxy.SOCKS5("tcp", core.ParseTCPAddr(h.proxyHost, h.proxyPort).String(), nil, nil)
+	var auth *proxy.Auth
+	if h.Uname != "" && h.Pwd != "" {
+		auth = &proxy.Auth{
+			User:     h.Uname,
+			Password: h.Pwd,
+		}
+	}
+	dialer, err := proxy.SOCKS5("tcp", core.ParseTCPAddr(h.proxyHost, h.proxyPort).String(), auth, nil)
 	if err != nil {
 		return err
 	}
