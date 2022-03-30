@@ -1,7 +1,6 @@
 package socks
 
 import (
-	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -101,8 +100,6 @@ func (h *tcpHandler) Handle(conn net.Conn, target *net.TCPAddr) error {
 			Password: h.Pwd,
 		}
 	}
-	fmt.Println("执行tcphandle")
-	fmt.Println("auth的值", *auth)
 	dialer, err := proxy.SOCKS5("tcp", core.ParseTCPAddr(h.proxyHost, h.proxyPort).String(), auth, nil)
 	if err != nil {
 		return err
