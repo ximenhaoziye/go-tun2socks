@@ -5,7 +5,7 @@ import (
 	// "encoding/hex"
 	"errors"
 	"fmt"
-	"io"
+	//	"io"
 	"log"
 	"net"
 	"os/exec"
@@ -157,7 +157,7 @@ func getTuntapComponentId(ifaceName string) (string, string, error) {
 	return "", "", errors.New("not found component id")
 }
 
-func OpenTunDevice(name, addr, gw, mask string, dns []string, persist bool) (io.ReadWriteCloser, error) {
+func OpenTunDevice(name, addr, gw, mask string, dns []string, persist bool) (*winTapDev, error) {
 	componentId, devName, err := getTuntapComponentId(name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get component ID: %v", err)
@@ -255,7 +255,7 @@ func OpenTunDevice(name, addr, gw, mask string, dns []string, persist bool) (io.
 		windows.Close(fd)
 		return nil, err
 	}
-	return newWinTapDev(fd, addr, gw), nil
+	return newWinTapDev(fd, addr, gw, devName), nil
 }
 
 type winTapDev struct {
@@ -265,6 +265,7 @@ type winTapDev struct {
 	writeLock sync.Mutex
 
 	fd          windows.Handle
+	Name        string
 	addr        string
 	addrIP      net.IP
 	gw          string
@@ -274,9 +275,12 @@ type winTapDev struct {
 	wInitiated  bool
 	rOverlapped windows.Overlapped
 	wOverlapped windows.Overlapped
+
+	recvbytes uint32
+	sentbytes uint32
 }
 
-func newWinTapDev(fd windows.Handle, addr string, gw string) *winTapDev {
+func newWinTapDev(fd windows.Handle, addr string, gw string, name string) *winTapDev {
 	rOverlapped := windows.Overlapped{}
 	rEvent, _ := windows.CreateEvent(nil, 0, 0, nil)
 	rOverlapped.HEvent = windows.Handle(rEvent)
@@ -291,10 +295,14 @@ func newWinTapDev(fd windows.Handle, addr string, gw string) *winTapDev {
 		wOverlapped: wOverlapped,
 		wInitiated:  false,
 
+		Name:   name,
 		addr:   addr,
 		addrIP: net.ParseIP(addr).To4(),
 		gw:     gw,
 		gwIP:   net.ParseIP(gw).To4(),
+
+		recvbytes: 0,
+		sentbytes: 0,
 	}
 	return dev
 }
@@ -341,6 +349,7 @@ func (dev *winTapDev) Read(data []byte) (int, error) {
 				return nr - 14, nil
 			}
 		}
+		dev.recvbytes += uint32(nr)
 	}
 }
 
@@ -367,6 +376,9 @@ func (dev *winTapDev) Write(data []byte) (int, error) {
 	} else {
 		nw = int(done)
 	}
+
+	dev.sentbytes = uint32(nw)
+
 	if nw != packetL {
 		return 0, fmt.Errorf("write %d packet (%d bytes payload), return %d", packetL, payloadL, nw)
 	} else {
@@ -390,4 +402,8 @@ func (dev *winTapDev) Close() error {
 	log.Printf("close winTap device")
 	sendStopMarker(dev.addr, dev.gw)
 	return windows.Close(dev.fd)
+}
+
+func (dev *winTapDev) GetDevStatistics() (uint32, uint32) {
+	return dev.recvbytes, dev.sentbytes
 }
